@@ -1,0 +1,32 @@
+[device]
+name = "ds18b20"
+description = "Dallas 1-Wire temperature sensor via serial bridge"
+
+[connection]
+protocol = "serial"
+port = "/dev/ttyUSB0"
+baud_rate = 9600
+timeout_ms = 2000
+
+[[tools]]
+name = "get_reading"
+description = "Get current temperature in Celsius"
+command = "READ_TEMP"
+
+[tools.returns]
+type = "float"
+unit = "celsius"
+
+[[tools]]
+name = "get_resolution"
+description = "Get current sensor resolution in bits (9-12)"
+command = "GET_RES"
+
+[tools.returns]
+type = "int"
+unit = "bits"
+
+[health]
+check_command = "PING"
+expected = "PONG"
+interval_ms = 10000
