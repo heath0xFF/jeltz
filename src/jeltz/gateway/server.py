@@ -159,12 +159,18 @@ class JeltzServer:
         self._fleet = None
         self._store = None
 
+    async def serve_stdio(self) -> None:
+        """Serve MCP over stdio transport. Call start() first."""
+        if self._store is None:
+            raise RuntimeError("server not started — call start() first")
+        async with stdio_server() as (read_stream, write_stream):
+            await self._server.run(read_stream, write_stream)
+
     async def run_stdio(self) -> None:
-        """Run the server over stdio transport."""
-        await self.start()
+        """Start the server and run over stdio transport."""
         try:
-            async with stdio_server() as (read_stream, write_stream):
-                await self._server.run(read_stream, write_stream)
+            await self.start()
+            await self.serve_stdio()
         finally:
             await self.stop()
 

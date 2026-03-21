@@ -148,6 +148,26 @@ class TestServerLifecycle:
         if srv.store:
             await srv.store.close()
 
+    async def test_serve_stdio_before_start_raises(
+        self, profiles_dir: Path
+    ) -> None:
+        srv = JeltzServer(profiles_dir=profiles_dir, db_path=":memory:")
+        with pytest.raises(RuntimeError, match="not started"):
+            await srv.serve_stdio()
+
+    async def test_run_stdio_cleans_up_on_start_failure(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "bad.toml").write_text(
+            '[device]\nname = "fleet"\n[connection]\nprotocol = "mock"\n'
+        )
+        srv = JeltzServer(profiles_dir=tmp_path, db_path=":memory:")
+        with pytest.raises(ValueError, match="reserved"):
+            await srv.run_stdio()
+        # stop() should have been called by run_stdio's finally block
+        assert srv.store is None
+        assert srv.aggregator is None
+
 
 class TestHandleListTools:
     async def test_merges_device_and_fleet_tools(self, server: JeltzServer) -> None:

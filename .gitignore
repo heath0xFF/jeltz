@@ -11,6 +11,11 @@ build/
 .pytest_cache/
 .ruff_cache/
 
+# Data
+*.db
+*.db-shm
+*.db-wal
+
 # Environment
 .env
 .venv/
