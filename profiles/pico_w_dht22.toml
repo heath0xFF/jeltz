@@ -1,0 +1,76 @@
+# Raspberry Pi Pico W + DHT22 — WiFi Temperature/Humidity Station
+#
+# A Pico W reading a DHT22 sensor and responding to commands over MQTT.
+# The gateway publishes commands to the device's cmd topic and reads
+# responses from the response topic (request/reply pattern).
+#
+# Wiring:
+#   DHT22 VCC  → Pico W 3V3 (pin 36)
+#   DHT22 DATA → Pico W GP15 (with 10K pull-up to 3.3V)
+#   DHT22 GND  → Pico W GND (pin 38)
+#
+# The Pico W should run MicroPython (or C) firmware that:
+#   1. Connects to WiFi and the MQTT broker
+#   2. Subscribes to the command topic
+#   3. On receiving a command, reads the sensor and publishes the response
+#
+# MQTT topics (relative to topic_prefix):
+#   {topic_prefix}/cmd      → gateway publishes commands here
+#   {topic_prefix}/response → device publishes responses here
+#   {topic_prefix}/status   → "online" / "offline" (LWT)
+#
+# Example MicroPython command handler:
+#
+#   def on_message(topic, msg):
+#       cmd = msg.decode().strip()
+#       if cmd == "READ_TEMP":
+#           client.publish(RESPONSE_TOPIC, str(dht.temperature()))
+#       elif cmd == "READ_HUMID":
+#           client.publish(RESPONSE_TOPIC, str(dht.humidity()))
+#       elif cmd == "READ_ALL":
+#           t, h = dht.temperature(), dht.humidity()
+#           client.publish(RESPONSE_TOPIC, f"{t},{h}")
+#       elif cmd == "PING":
+#           client.publish(RESPONSE_TOPIC, "PONG")
+
+[device]
+name = "pico_w_dht22"
+description = "Raspberry Pi Pico W with DHT22 sensor over MQTT"
+
+[connection]
+protocol = "mqtt"
+broker = "localhost"
+mqtt_port = 1883
+timeout_ms = 5000
+topic_prefix = "jeltz/pico_w_dht22"
+
+[[tools]]
+name = "get_temperature"
+description = "Get the latest temperature reading from the Pico W's DHT22 sensor"
+command = "READ_TEMP"
+
+[tools.returns]
+type = "float"
+unit = "celsius"
+
+[[tools]]
+name = "get_humidity"
+description = "Get the latest relative humidity reading from the Pico W's DHT22 sensor"
+command = "READ_HUMID"
+
+[tools.returns]
+type = "float"
+unit = "percent"
+
+[[tools]]
+name = "get_reading"
+description = "Get both temperature (celsius) and humidity (percent) from the Pico W"
+command = "READ_ALL"
+
+[tools.returns]
+type = "string"
+
+[health]
+check_command = "PING"
+expected = "PONG"
+interval_ms = 15000
