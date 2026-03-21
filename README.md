@@ -1,6 +1,6 @@
 # Jeltz
 
-> **Status:** Gateway core working, CLI implemented, serial adapter shipped. 252 tests passing. TOML profile parsing, MCP tool generation, device discovery, fleet-level tools (cross-device reads, history, anomaly search), SQLite time-series storage with retention, and two built-in profiles. MQTT adapter is next. Star/watch to follow along.
+> **Status: Phase 1 complete.** Gateway core, CLI, serial + MQTT adapters, fleet-level tools, SQLite time-series storage, auto-recording of sensor readings, and built-in profiles — all working. 284 tests passing. See the [Getting Started guide](docs/getting-started.md) to try it.
 
 **Your sensors will be processed.**
 
@@ -196,15 +196,21 @@ jeltz add-device <file.toml> # Validate and copy a profile into profiles/
 
 ## Roadmap
 
-- **Phase 1 (in progress):** ~~Core framework~~ ✓, ~~serial adapter~~ ✓, MQTT adapter, ~~SQLite time-series storage~~ ✓, ~~fleet-level tools~~ ✓, ~~CLI~~ ✓, ~~built-in profiles~~ ✓, ~~mock adapter~~ ✓
+- **Phase 1 (complete):** ~~Core framework~~ ✓, ~~serial adapter~~ ✓, ~~MQTT adapter~~ ✓, ~~SQLite time-series storage~~ ✓, ~~fleet-level tools~~ ✓, ~~CLI~~ ✓, ~~built-in profiles~~ ✓, ~~mock adapter~~ ✓
 - **Phase 2:** `jeltz-arduino` C++ library, USB adapter, community profile repository, device namespacing
 - **Phase 3:** Edge Impulse integration, local LLM integration, web dashboard, alert system, event streaming
 - **Phase 4:** Additional protocol adapters (Modbus, BLE, CAN bus), IQ9 reference deployment, additional ML platform integrations
 
+## Documentation
+
+- **[Getting Started](docs/getting-started.md)** — full tutorial: install, wire hardware, flash firmware, connect an MCP client
+- **[Writing Profiles](docs/writing-profiles.md)** — TOML profile reference: tools, parameters, return types, health checks
+- **[Writing Adapters](docs/writing-adapters.md)** — how to add support for a new protocol
+
 ## Development
 
 ```bash
-hatch run test        # Run tests (mock adapter, no hardware needed)
+hatch run test        # Run tests (284 tests, mock adapter, no hardware needed)
 hatch run lint        # Ruff linter
 hatch run typecheck   # Mypy strict mode
 ```
