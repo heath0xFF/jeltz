@@ -7,6 +7,7 @@ from pathlib import Path
 
 from jeltz.adapters.base import BaseAdapter
 from jeltz.adapters.mock import MockAdapter
+from jeltz.adapters.mqtt import MQTTAdapter
 from jeltz.adapters.serial import SerialAdapter
 from jeltz.devices.model import DeviceModel
 from jeltz.profiles.parser import ProfileError, parse_profile
@@ -14,6 +15,7 @@ from jeltz.profiles.parser import ProfileError, parse_profile
 # Registry mapping protocol names to adapter classes.
 _ADAPTER_REGISTRY: dict[str, type[BaseAdapter]] = {
     "mock": MockAdapter,
+    "mqtt": MQTTAdapter,
     "serial": SerialAdapter,
 }
 
