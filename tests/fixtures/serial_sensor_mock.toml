@@ -1,0 +1,46 @@
+# Mock variant of the serial sensor profile for testing without hardware.
+[device]
+name = "serial_sensor"
+description = "Sensor connected via serial (UART/USB)"
+
+[connection]
+protocol = "mock"
+
+[[tools]]
+name = "get_temperature"
+description = "Get current temperature reading"
+command = "READ_TEMP"
+
+[tools.returns]
+type = "float"
+unit = "celsius"
+
+[[tools]]
+name = "get_humidity"
+description = "Get current relative humidity reading"
+command = "READ_HUMID"
+
+[tools.returns]
+type = "float"
+unit = "percent"
+
+[[tools]]
+name = "get_reading"
+description = "Get both temperature (celsius) and humidity (percent) in one call"
+command = "READ_ALL"
+
+[tools.returns]
+type = "string"
+
+[[tools]]
+name = "get_status"
+description = "Check if the sensor is operating normally"
+command = "STATUS"
+
+[tools.returns]
+type = "string"
+
+[health]
+check_command = "PING"
+expected = "PONG"
+interval_ms = 10000

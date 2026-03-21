@@ -173,7 +173,11 @@ class Aggregator:
             )
 
     async def health_check_all(self) -> dict[str, AdapterResult]:
-        """Run health checks on all connected devices concurrently."""
+        """Run health checks on all connected devices concurrently.
+
+        Acquires the per-device lock to avoid interleaving health check
+        commands with in-flight tool calls on the same serial port.
+        """
         results: dict[str, AdapterResult] = {}
 
         async def _check(name: str, device: DiscoveredDevice) -> None:
@@ -181,10 +185,11 @@ class Aggregator:
             if not status.connected:
                 results[name] = AdapterResult.fail("not connected")
                 return
-            try:
-                result = await device.adapter.health_check()
-            except Exception as e:
-                result = AdapterResult.fail(str(e))
+            async with self._device_locks[name]:
+                try:
+                    result = await device.adapter.health_check()
+                except Exception as e:
+                    result = AdapterResult.fail(str(e))
             results[name] = result
             status.healthy = result.success
             if result.success:

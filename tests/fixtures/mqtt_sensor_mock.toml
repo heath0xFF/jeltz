@@ -1,14 +1,14 @@
-# Mock variant of the ESP32+DHT22 profile for testing without hardware.
+# Mock variant of the MQTT sensor profile for testing without hardware.
 [device]
-name = "esp32_dht22"
-description = "ESP32 with DHT22 temperature and humidity sensor"
+name = "mqtt_sensor"
+description = "Sensor connected via MQTT (WiFi)"
 
 [connection]
 protocol = "mock"
 
 [[tools]]
 name = "get_temperature"
-description = "Get current temperature from the DHT22 sensor"
+description = "Get current temperature reading"
 command = "READ_TEMP"
 
 [tools.returns]
@@ -17,7 +17,7 @@ unit = "celsius"
 
 [[tools]]
 name = "get_humidity"
-description = "Get current relative humidity from the DHT22 sensor"
+description = "Get current relative humidity reading"
 command = "READ_HUMID"
 
 [tools.returns]
@@ -32,15 +32,7 @@ command = "READ_ALL"
 [tools.returns]
 type = "string"
 
-[[tools]]
-name = "get_status"
-description = "Check if the ESP32 and sensor are operating normally"
-command = "STATUS"
-
-[tools.returns]
-type = "string"
-
 [health]
 check_command = "PING"
 expected = "PONG"
-interval_ms = 10000
+interval_ms = 15000

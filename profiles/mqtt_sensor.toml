@@ -1,0 +1,107 @@
+# MQTT Sensor — any device publishing sensor data over MQTT
+#
+# Works with any WiFi-capable board (Pico W, ESP32, ESP8266, etc.)
+# that connects to an MQTT broker and responds to commands via a
+# request/reply topic pattern.
+#
+# Protocol:
+#   Gateway publishes:  "READ_TEMP"  → {topic_prefix}/cmd
+#   Device publishes:   "22.5"       → {topic_prefix}/response
+#
+# The tools below assume a temperature + humidity sensor (e.g. DHT22,
+# BME280, SHT31), but you can change the commands and return types for
+# any sensor.
+#
+# MQTT topics (relative to topic_prefix):
+#   {topic_prefix}/cmd      → gateway sends commands here
+#   {topic_prefix}/response → device sends responses here
+#   {topic_prefix}/status   → "online" / "offline" (LWT)
+#
+# ── Example MicroPython firmware (Pico W / ESP32) ──────────────────
+#
+#   import network, time
+#   from machine import Pin
+#   from dht import DHT22
+#   from umqtt.simple import MQTTClient
+#
+#   # Connect WiFi
+#   wlan = network.WLAN(network.STA_IF)
+#   wlan.active(True)
+#   wlan.connect("YOUR_SSID", "YOUR_PASSWORD")
+#   while not wlan.isconnected():
+#       time.sleep(0.1)
+#
+#   sensor = DHT22(Pin(15))
+#   PREFIX = "jeltz/mqtt_sensor"
+#   CMD_TOPIC = f"{PREFIX}/cmd"
+#   RESP_TOPIC = f"{PREFIX}/response"
+#
+#   def on_message(topic, msg):
+#       cmd = msg.decode().strip()
+#       if cmd == "READ_TEMP":
+#           sensor.measure()
+#           client.publish(RESP_TOPIC, str(sensor.temperature()))
+#       elif cmd == "READ_HUMID":
+#           sensor.measure()
+#           client.publish(RESP_TOPIC, str(sensor.humidity()))
+#       elif cmd == "READ_ALL":
+#           sensor.measure()
+#           t, h = sensor.temperature(), sensor.humidity()
+#           client.publish(RESP_TOPIC, f"{t},{h}")
+#       elif cmd == "PING":
+#           client.publish(RESP_TOPIC, "PONG")
+#
+#   client = MQTTClient("sensor", "YOUR_BROKER_IP")
+#   client.set_last_will(f"{PREFIX}/status", "offline", retain=True)
+#   client.set_callback(on_message)
+#   client.connect()
+#   client.publish(f"{PREFIX}/status", "online", retain=True)
+#   client.subscribe(CMD_TOPIC)
+#
+#   while True:
+#       client.check_msg()
+#       time.sleep(0.1)
+#
+# ────────────────────────────────────────────────────────────────────
+
+[device]
+name = "mqtt_sensor"
+description = "Sensor connected via MQTT (WiFi)"
+
+[connection]
+protocol = "mqtt"
+broker = "localhost"
+mqtt_port = 1883
+timeout_ms = 5000
+topic_prefix = "jeltz/mqtt_sensor"
+
+[[tools]]
+name = "get_temperature"
+description = "Get current temperature reading"
+command = "READ_TEMP"
+
+[tools.returns]
+type = "float"
+unit = "celsius"
+
+[[tools]]
+name = "get_humidity"
+description = "Get current relative humidity reading"
+command = "READ_HUMID"
+
+[tools.returns]
+type = "float"
+unit = "percent"
+
+[[tools]]
+name = "get_reading"
+description = "Get both temperature (celsius) and humidity (percent) in one call"
+command = "READ_ALL"
+
+[tools.returns]
+type = "string"
+
+[health]
+check_command = "PING"
+expected = "PONG"
+interval_ms = 15000

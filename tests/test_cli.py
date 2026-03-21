@@ -299,10 +299,10 @@ class TestTestDevice:
         assert "Invalid profile" in result.output
 
     def test_unknown_protocol(self, runner: CliRunner, tmp_path: Path) -> None:
-        profile = tmp_path / "serial.toml"
+        profile = tmp_path / "modbus.toml"
         profile.write_text(
-            '[device]\nname = "serial_device"\n'
-            '[connection]\nprotocol = "serial"\nport = "/dev/ttyUSB0"\n'
+            '[device]\nname = "modbus_device"\n'
+            '[connection]\nprotocol = "modbus"\n'
         )
         result = runner.invoke(main, ["test", str(profile)])
         assert result.exit_code != 0
