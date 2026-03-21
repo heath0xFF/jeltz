@@ -1,6 +1,6 @@
 # Jeltz
 
-> **Status: Early development.** The gateway core is working: TOML profile parsing, MCP tool generation, device discovery, aggregator with per-device routing, fleet-level tools (cross-device reads, history, anomaly search), SQLite time-series storage with retention, and the MCP server endpoint. CLI is next. Star/watch to follow along.
+> **Status:** Gateway core working, CLI implemented, serial adapter shipped. 252 tests passing. TOML profile parsing, MCP tool generation, device discovery, fleet-level tools (cross-device reads, history, anomaly search), SQLite time-series storage with retention, and two built-in profiles. MQTT adapter is next. Star/watch to follow along.
 
 **Your sensors will be processed.**
 
@@ -9,10 +9,12 @@ Jeltz is an open source framework that connects AI assistants to physical device
 Write a TOML profile describing your hardware. Jeltz generates an MCP server. Plug in your device. Now any MCP client can reason across your entire sensor fleet.
 
 ```
-$ jeltz start
-✓ Gateway running on http://localhost:8420
-✓ Discovered 8 devices, exposing 23 tools
-✓ MCP endpoint ready
+$ jeltz start -p profiles
+✓ Discovered 3 device(s), exposing 15 tools
+  ✓ serial_sensor
+  ✓ mqtt_sensor
+  ✓ pressure_line
+✓ MCP server ready on stdio
 ```
 
 A dashboard shows you numbers. Jeltz lets an LLM *reason about what they mean*:
@@ -57,11 +59,11 @@ Jeltz runs on a gateway device (Raspberry Pi, laptop, Qualcomm IQ9, any Linux bo
 
 **The AI stays in the cloud (or on a local LLM). Jeltz is just the plumbing that connects it to your devices.** An MCP server is not an AI model — it's a lightweight protocol endpoint. It uses negligible resources on the gateway.
 
-## Two ways to add devices
+## Adding devices
 
-### Path 1: TOML profiles (no firmware changes)
+### TOML profiles
 
-For devices you don't control the firmware on, or simple sensors with text-based command protocols. Write a TOML file:
+Write a TOML file that describes the device: what it is, how to connect, and what commands it understands. Jeltz generates MCP tools from it.
 
 ```toml
 [device]
@@ -72,11 +74,12 @@ description = "Temperature monitoring for 6 fermentation tanks"
 protocol = "serial"
 port = "/dev/ttyUSB0"
 baud_rate = 115200
-timeout_ms = 1000
+timeout_ms = 3000
 
 [[tools]]
 name = "get_reading"
 description = "Get current temperature for a specific tank"
+command = "READ_TEMP {tank_index}"
 
 [tools.params.tank_index]
 type = "int"
@@ -87,14 +90,6 @@ max = 5
 type = "float"
 unit = "celsius"
 
-[[tools]]
-name = "get_all_readings"
-description = "Get all 6 tank temperatures at once"
-
-[tools.returns]
-type = "array"
-unit = "celsius"
-
 [health]
 check_command = "PING"
 expected = "PONG"
@@ -103,57 +98,35 @@ interval_ms = 10000
 
 ```
 $ jeltz add-device fermentation_temps.toml
-$ jeltz start
+✓ Added fermentation_temps (profiles/fermentation_temps.toml)
+
+$ jeltz test profiles/fermentation_temps.toml
+Device:   fermentation_temps
+Protocol: serial
+Tools:    1
+✓ Connected
+✓ Health check passed
+✓ Disconnected
 ```
 
-Done. Any LLM can now read your fermentation temps.
+The device firmware just needs to accept text commands over serial (or MQTT) and respond with plain text. See the [built-in profiles](profiles/) for complete firmware examples.
 
-### Path 2: Arduino library (self-describing devices)
+### Self-describing devices (Phase 2)
 
-For devices where you write the firmware. Add the `jeltz-arduino` library and register your tools in C++:
+The `jeltz-arduino` C++ library will let devices self-describe to the gateway — no TOML profile needed. Register tools in firmware, plug in the device, and the gateway discovers it automatically.
 
-```cpp
-#include <jeltz.h>
+## Built-in profiles
 
-Jeltz jeltz("fermentation_temps");
+Jeltz ships with profiles for common setups. Each includes wiring diagrams and complete firmware examples you can flash:
 
-void setup() {
-  Serial.begin(115200);
+| Profile | Protocol | Description |
+|---------|----------|-------------|
+| [`serial_sensor`](profiles/serial_sensor.toml) | Serial | Any microcontroller with a text command protocol over USB serial |
+| [`mqtt_sensor`](profiles/mqtt_sensor.toml) | MQTT | Any WiFi device publishing sensor data over MQTT |
 
-  jeltz.addTool("get_reading", "Get tank temperature",
-    [](JsonObject params) {
-      int tank = params["tank_index"];
-      return jeltz.result(readProbe(tank), "celsius");
-    });
-
-  jeltz.begin();
-}
-
-void loop() {
-  jeltz.poll();
-}
-```
-
-The device self-describes to the gateway — no TOML profile needed. Just plug it in.
-
-*(`jeltz-arduino` is coming in Phase 2)*
-
-## Built-in profiles (planned)
-
-Jeltz will ship with profiles for common hardware:
-
-| Sensor | Protocol | Description |
-|--------|----------|-------------|
-| DS18B20 | Serial | Dallas 1-Wire temperature sensor |
-| DHT22 | Serial | Temperature + humidity |
-| BME280 | Serial/I2C | Temperature + humidity + barometric pressure |
-| HX711 | Serial | Load cell / weight sensor |
-| Generic ESP32 | Serial | Any ESP32 with a text command protocol |
-| RPi Pico W | MQTT | Pico W publishing sensor data over MQTT |
+These profiles use temperature + humidity as an example, but the commands and return types are easily adapted to any sensor.
 
 ## Installation
-
-> Not yet published to PyPI. For now, install from source:
 
 ```bash
 git clone https://github.com/hhheath/jeltz.git
@@ -161,38 +134,48 @@ cd jeltz
 pip install -e .
 ```
 
-## Quickstart (coming soon)
+Requires Python 3.11+.
 
-Once the gateway and CLI are implemented:
+## Quickstart
 
 ```bash
-# Initialize a new Jeltz project
-jeltz init my-sensors
-cd my-sensors
+# Copy a built-in profile into your working directory
+mkdir profiles
+cp jeltz/profiles/serial_sensor.toml profiles/
 
-# Add a device using a built-in profile
-jeltz add-device ds18b20 --port /dev/ttyUSB0
+# Edit the profile — set your serial port, adjust commands if needed
+# (or use it as-is with the example firmware from the profile comments)
 
-# Test the device connection (uses mock if no hardware present)
-jeltz test ds18b20
+# Test the device connection
+jeltz test profiles/serial_sensor.toml
 
-# Start the gateway
-jeltz start
+# Check what the gateway sees
+jeltz status -p profiles
 
-# Check status
-jeltz status
+# Start the MCP server
+jeltz start -p profiles
 ```
 
-Then add to your MCP client config:
+Then add Jeltz to your MCP client. For Claude Desktop or Claude Code:
 
 ```json
 {
   "mcpServers": {
     "jeltz": {
-      "url": "http://localhost:8420/mcp"
+      "command": "jeltz",
+      "args": ["start", "-p", "/path/to/your/profiles"]
     }
   }
 }
+```
+
+## CLI
+
+```bash
+jeltz start -p profiles      # Start the MCP gateway (stdio transport)
+jeltz status -p profiles     # Show connected devices and health
+jeltz test <profile.toml>    # Test a single device connection
+jeltz add-device <file.toml> # Validate and copy a profile into profiles/
 ```
 
 ## Use cases
@@ -203,13 +186,13 @@ Then add to your MCP client config:
 
 **Natural language commissioning.** "I just installed 3 new pressure sensors on the coolant lines. Run a health check on all three, verify they're reading within spec, and set alert thresholds at 15% above their current baseline." One sentence drives a multi-tool workflow: discover, read, calculate, configure.
 
-**Air-gapped / local-first deployments.** Pair Jeltz with a local LLM (llama.cpp on a Raspberry Pi 5 or Qualcomm IQ9) for fully offline, data-sovereign AI interaction with your equipment. No cloud, no internet, no data leaving the building. The LLM handles tool routing locally; the reasoning stays on-site.
+**Air-gapped / local-first deployments.** Pair Jeltz with a local LLM (llama.cpp on a Raspberry Pi 5 or Qualcomm IQ9) for fully offline, data-sovereign AI interaction with your equipment. No cloud, no internet, no data leaving the building.
 
 **Home automation with brains.** Bridge your DIY sensors into any MCP-compatible AI assistant. Not just "turn on the lights" — "the humidity in the basement has been climbing for 3 days and the sump pump hasn't cycled. You might have a drainage issue."
 
 ## Roadmap
 
-- **Phase 1 (in progress):** Core framework, serial + MQTT adapters, SQLite time-series storage, fleet-level tools (cross-device reads, history, anomaly search), CLI, built-in profiles, mock adapter for testing
+- **Phase 1 (in progress):** ~~Core framework~~ ✓, ~~serial adapter~~ ✓, MQTT adapter, ~~SQLite time-series storage~~ ✓, ~~fleet-level tools~~ ✓, ~~CLI~~ ✓, ~~built-in profiles~~ ✓, ~~mock adapter~~ ✓
 - **Phase 2:** `jeltz-arduino` C++ library, USB adapter, community profile repository, device namespacing
 - **Phase 3:** Edge Impulse integration, local LLM integration, web dashboard, alert system, event streaming
 - **Phase 4:** Additional protocol adapters (Modbus, BLE, CAN bus), IQ9 reference deployment, additional ML platform integrations
@@ -221,8 +204,6 @@ hatch run test        # Run tests (mock adapter, no hardware needed)
 hatch run lint        # Ruff linter
 hatch run typecheck   # Mypy strict mode
 ```
-
-Requires Python 3.11+.
 
 ## Contributing
 
