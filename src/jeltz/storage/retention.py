@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING
 
@@ -22,12 +23,19 @@ async def run_cleanup(
 ) -> dict[str, int]:
     """Run the full retention pipeline: downsample, then purge.
 
+    Opens a separate database connection so retention transactions
+    don't interfere with the main connection's record() commits.
+
     Returns counts of rows affected for observability.
     """
-    db = store._conn()
-    downsampled = await _downsample_old_readings(db, full_res_days)
-    purged = await _purge_expired(db, keep_downsampled_days)
-    return {"downsampled": downsampled, "purged": purged}
+    db, should_close = await store.open_retention_conn()
+    try:
+        downsampled = await _downsample_old_readings(db, full_res_days)
+        purged = await _purge_expired(db, keep_downsampled_days)
+        return {"downsampled": downsampled, "purged": purged}
+    finally:
+        if should_close:
+            await db.close()
 
 
 async def _downsample_old_readings(
@@ -42,8 +50,8 @@ async def _downsample_old_readings(
     cutoff = time.time() - (full_res_days * 86400)
 
     # Use an explicit transaction so the INSERT + DELETE are atomic.
-    # Without this, a concurrent commit() from store.record() could
-    # commit the INSERT without the DELETE, causing duplicates on crash.
+    # This runs on a dedicated connection so no other caller can
+    # commit or roll back our partial work.
     await db.execute("BEGIN IMMEDIATE")
     try:
         # Insert hourly averages for old full-res data
@@ -75,7 +83,12 @@ async def _downsample_old_readings(
 
         await db.commit()
     except BaseException:
-        await db.rollback()
+        # Shield rollback from CancelledError so the connection
+        # is left in a clean state even during task cancellation.
+        try:
+            await asyncio.shield(db.rollback())
+        except Exception:
+            pass
         raise
 
     return deleted
