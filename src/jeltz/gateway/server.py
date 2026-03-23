@@ -319,9 +319,13 @@ class JeltzServer:
     ) -> None:
         """Run daemon background tasks: recording, retention, and HTTP server.
 
-        Call ``start()`` first. Uses TaskGroup so that if any task crashes,
-        all sibling tasks are cancelled and the error propagates cleanly.
+        Call ``start()`` first. Installs signal handlers for SIGINT/SIGTERM
+        to trigger graceful shutdown: sets stop_event so recorder and
+        retention loops can finish their current cycle, then tells uvicorn
+        to exit, which collapses the TaskGroup cleanly.
         """
+        import signal
+
         import uvicorn
 
         if not self._aggregator or not self._store:
@@ -333,6 +337,20 @@ class JeltzServer:
         app, _ = self._build_http_app()
         config = uvicorn.Config(app, host=host, port=port, log_level="warning")
         http_server = uvicorn.Server(config)
+
+        loop = asyncio.get_running_loop()
+
+        def _request_shutdown() -> None:
+            """Signal handler: set stop_event and tell uvicorn to exit.
+
+            This lets recorder/retention finish their current poll cycle
+            before TaskGroup teardown, instead of hard-cancelling them.
+            """
+            stop_event.set()
+            http_server.should_exit = True
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, _request_shutdown)
 
         try:
             async with asyncio.TaskGroup() as tg:
@@ -351,6 +369,8 @@ class JeltzServer:
         finally:
             stop_event.set()
             self._daemon_active = False
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                loop.remove_signal_handler(sig)
             await self.stop()
 
     async def run_daemon(

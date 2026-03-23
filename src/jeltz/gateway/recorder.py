@@ -129,9 +129,12 @@ async def run_recorder(
 
     try:
         await asyncio.gather(*tasks)
-    except Exception:
-        logger.exception("recorder: unexpected error in polling loop")
+    except BaseException:
+        # Catches both regular exceptions and CancelledError (from
+        # TaskGroup teardown on SIGINT/SIGTERM). Signal stop so any
+        # still-running tasks can finish their current poll cycle.
         stop_event.set()
+        raise
     finally:
         # Cancel any still-running tasks and wait for them to finish
         for task in tasks:
