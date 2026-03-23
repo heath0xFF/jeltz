@@ -222,6 +222,53 @@ class TestRunRecorder:
             await agg.disconnect_all()
 
 
+    async def test_cancellation_cleans_up_tasks(self, store: ReadingStore) -> None:
+        """When run_recorder is cancelled, all child tasks should be cancelled."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            Path(td, "sensor.toml").write_text(
+                '[device]\n'
+                'name = "slow_sensor"\n'
+                '[connection]\n'
+                'protocol = "mock"\n'
+                '[recording]\n'
+                'poll_interval_ms = 100\n'
+                '[[tools]]\n'
+                'name = "get_reading"\n'
+                'description = "Get value"\n'
+                'command = "READ"\n'
+                '[tools.returns]\n'
+                'type = "float"\n'
+                'unit = "units"\n'
+            )
+            discovery = discover_profiles(Path(td))
+            agg = Aggregator(discovery.devices)
+            await agg.connect_all()
+
+            for name in agg.device_names:
+                status = agg.get_status(name)
+                if status and isinstance(status.device.adapter, MockAdapter):
+                    status.device.adapter.responses = {"READ": "42.0"}
+
+            stop_event = asyncio.Event()
+            task = asyncio.create_task(run_recorder(agg, store, stop_event))
+
+            # Let it run briefly
+            await asyncio.sleep(0.2)
+
+            # Cancel it
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+            # The task should be done — no dangling tasks
+            assert task.done()
+            await agg.disconnect_all()
+
+
 class TestRecordingConfig:
     def test_custom_poll_interval(self, tmp_path: Path) -> None:
         """Profile with [recording] section should parse correctly."""
