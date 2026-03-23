@@ -39,6 +39,9 @@ def _recordable_routes(aggregator: Aggregator) -> dict[str, list[ToolRoute]]:
             continue
         if not route.returns or route.returns.type not in _NUMERIC_TYPES:
             continue
+        # Skip tools that require parameters — we can't auto-poll them
+        if route.params and any(p.required for p in route.params.values()):
+            continue
         by_device.setdefault(route.device.name, []).append(route)
     return by_device
 

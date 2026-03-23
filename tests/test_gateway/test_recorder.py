@@ -82,6 +82,29 @@ class TestRecordableRoutes:
         # status_device.get_status is string — should not be present
         assert "status_device" not in by_device
 
+    def test_skips_tools_with_required_params(self, tmp_path: Path) -> None:
+        """Tools requiring parameters can't be auto-polled."""
+        (tmp_path / "param_tool.toml").write_text(
+            '[device]\n'
+            'name = "param_sensor"\n'
+            '[connection]\n'
+            'protocol = "mock"\n'
+            '[[tools]]\n'
+            'name = "get_reading"\n'
+            'description = "Get reading for a channel"\n'
+            'command = "READ {channel}"\n'
+            '[tools.params.channel]\n'
+            'type = "int"\n'
+            'required = true\n'
+            '[tools.returns]\n'
+            'type = "float"\n'
+            'unit = "volts"\n'
+        )
+        discovery = discover_profiles(tmp_path)
+        agg = Aggregator(discovery.devices)
+        by_device = _recordable_routes(agg)
+        assert "param_sensor" not in by_device
+
     def test_returns_correct_route_info(self, aggregator: Aggregator) -> None:
         by_device = _recordable_routes(aggregator)
         routes = by_device["temp_sensor"]
