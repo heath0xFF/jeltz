@@ -6,7 +6,7 @@ plus fleet-level tools.
 
 Supports two modes:
 - **stdio**: Ephemeral — one MCP client owns the process (``jeltz start``)
-- **daemon**: Long-running — background recording + SSE endpoint (``jeltz daemon``)
+- **daemon**: Long-running — background recording + Streamable HTTP endpoint (``jeltz daemon``)
 """
 
 from __future__ import annotations
@@ -17,13 +17,12 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.lowlevel import Server
-from mcp.server.sse import SseServerTransport
 from mcp.server.stdio import stdio_server
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import CallToolResult, TextContent, Tool
 from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import Response
-from starlette.routing import Mount, Route
+from starlette.routing import Route
+from starlette.types import Receive, Scope, Send
 
 from jeltz.gateway.aggregator import Aggregator
 from jeltz.gateway.discovery import DiscoveryResult, discover_profiles
@@ -254,40 +253,52 @@ class JeltzServer:
             except asyncio.TimeoutError:
                 pass
 
-    def _build_sse_app(self) -> tuple[Starlette, SseServerTransport]:
-        """Build a Starlette ASGI app that serves MCP over SSE."""
-        sse_transport = SseServerTransport("/messages/")
-        mcp_server = self._server
+    def _build_http_app(self) -> tuple[Starlette, StreamableHTTPSessionManager]:
+        """Build a Starlette ASGI app that serves MCP over Streamable HTTP."""
+        session_manager = StreamableHTTPSessionManager(
+            app=self._server,
+            stateless=False,
+        )
 
-        async def handle_sse(request: Request) -> Response:
-            async with sse_transport.connect_sse(
-                request.scope, request.receive, request._send
-            ) as streams:
-                await mcp_server.run(
-                    streams[0], streams[1], mcp_server.create_initialization_options()
-                )
-            return Response()
+        class _MCPEndpoint:
+            """ASGI app that delegates to the session manager."""
+
+            def __init__(self, mgr: StreamableHTTPSessionManager) -> None:
+                self._mgr = mgr
+
+            async def __call__(
+                self, scope: Scope, receive: Receive, send: Send
+            ) -> None:
+                await self._mgr.handle_request(scope, receive, send)
+
+        async def lifespan(app: Starlette):  # type: ignore[no-untyped-def]
+            async with session_manager.run():
+                yield
 
         app = Starlette(
             routes=[
-                Route("/sse", endpoint=handle_sse, methods=["GET"]),
-                Mount("/messages/", app=sse_transport.handle_post_message),
+                Route(
+                    "/mcp",
+                    endpoint=_MCPEndpoint(session_manager),
+                    methods=["GET", "POST", "DELETE"],
+                ),
             ],
+            lifespan=lifespan,
         )
-        return app, sse_transport
+        return app, session_manager
 
-    async def serve_sse(self, host: str = "127.0.0.1", port: int = 8374) -> None:
-        """Serve MCP over SSE transport. Call start() first.
+    async def serve_http(self, host: str = "127.0.0.1", port: int = 8374) -> None:
+        """Serve MCP over Streamable HTTP transport. Call start() first.
 
-        Runs a Starlette/uvicorn HTTP server. Clients connect to GET /sse
-        and post messages to /messages/.
+        Runs a Starlette/uvicorn HTTP server. Clients interact via
+        POST/GET/DELETE on /mcp (MCP Streamable HTTP spec).
         """
         import uvicorn
 
         if self._store is None:
             raise RuntimeError("server not started — call start() first")
 
-        app, _ = self._build_sse_app()
+        app, _ = self._build_http_app()
         config = uvicorn.Config(app, host=host, port=port, log_level="warning")
         server = uvicorn.Server(config)
         await server.serve()
@@ -316,15 +327,15 @@ class JeltzServer:
         if not self._aggregator or not self._store:
             raise RuntimeError("server failed to initialize")
 
-        app, _ = self._build_sse_app()
+        app, _ = self._build_http_app()
         config = uvicorn.Config(app, host=host, port=port, log_level="warning")
-        sse_server = uvicorn.Server(config)
+        http_server = uvicorn.Server(config)
 
         try:
             await asyncio.gather(
                 run_recorder(self._aggregator, self._store, stop_event),
                 self._run_retention_loop(stop_event),
-                sse_server.serve(),
+                http_server.serve(),
             )
         finally:
             stop_event.set()

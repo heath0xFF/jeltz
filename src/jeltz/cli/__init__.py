@@ -113,20 +113,20 @@ def start(profiles_dir: Path, db_path: Path) -> None:
     "--host",
     default="127.0.0.1",
     show_default=True,
-    help="Host to bind the SSE server to.",
+    help="Host to bind the HTTP server to.",
 )
 @click.option(
     "--port",
     default=8374,
     show_default=True,
-    help="Port for the SSE server.",
+    help="Port for the MCP HTTP server.",
 )
 def daemon(profiles_dir: Path, db_path: Path, host: str, port: int) -> None:
     """Run Jeltz as a long-running daemon.
 
     Continuously polls sensors and records readings to the store.
-    Serves MCP over SSE so clients can connect and disconnect without
-    affecting the recording loop.
+    Serves MCP over Streamable HTTP so clients can connect and disconnect
+    without affecting the recording loop.
     """
     from jeltz.gateway.server import JeltzServer
 
@@ -175,7 +175,7 @@ def daemon(profiles_dir: Path, db_path: Path, host: str, port: int) -> None:
                         click.echo(f"  ✗ {name}: {s.error}", err=True)
 
             click.echo("✓ Background recording active", err=True)
-            click.echo(f"✓ MCP server ready on http://{host}:{port}/sse", err=True)
+            click.echo(f"✓ MCP server ready on http://{host}:{port}/mcp", err=True)
 
             # Run the daemon loops (recording + retention + SSE)
             import uvicorn
@@ -187,7 +187,7 @@ def daemon(profiles_dir: Path, db_path: Path, host: str, port: int) -> None:
             assert server.aggregator is not None
             assert server.store is not None
 
-            app, _ = server._build_sse_app()
+            app, _ = server._build_http_app()
             config = uvicorn.Config(app, host=host, port=port, log_level="warning")
             sse_server = uvicorn.Server(config)
 
