@@ -1,6 +1,6 @@
 # Jeltz
 
-> **Status: Phase 1 complete.** Gateway core, CLI, serial + MQTT adapters, fleet-level tools, SQLite time-series storage, daemon mode with background recording, and built-in profiles — all working. 294 tests passing. See the [Getting Started guide](docs/getting-started.md) to try it.
+> **Status: Phase 1 complete.** Gateway core, CLI, serial + MQTT adapters, fleet-level tools, SQLite time-series storage, daemon mode with background recording, and built-in profiles — all working. 305 tests passing. See the [Getting Started guide](docs/getting-started.md) to try it.
 
 **Your sensors will be processed.**
 
@@ -242,7 +242,7 @@ jeltz daemon -p profiles --host 0.0.0.0 --port 8374
 ## Development
 
 ```bash
-hatch run test        # Run tests (294 tests, mock adapter, no hardware needed)
+hatch run test        # Run tests (305 tests, mock adapter, no hardware needed)
 hatch run lint        # Ruff linter
 hatch run typecheck   # Mypy strict mode
 ```

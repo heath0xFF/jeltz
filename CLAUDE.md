@@ -12,7 +12,7 @@ Python 3.11+, `mcp` SDK, `pyserial`, `paho-mqtt`, `tomllib`, `click`, `pydantic`
 
 ```bash
 # Development
-hatch run test       # Run test suite (294 tests, mock adapter, no hardware needed)
+hatch run test       # Run test suite (305 tests, mock adapter, no hardware needed)
 hatch run lint       # Ruff linter
 hatch run typecheck  # Mypy
 
