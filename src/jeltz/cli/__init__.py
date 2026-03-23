@@ -139,71 +139,44 @@ def daemon(profiles_dir: Path, db_path: Path, host: str, port: int) -> None:
     async def _run() -> None:
         discovery = await server.start()
 
-        try:
-            for path, error in discovery.errors:
-                click.echo(f"⚠ Skipped {path.name}: {error}", err=True)
+        for path, error in discovery.errors:
+            click.echo(f"⚠ Skipped {path.name}: {error}", err=True)
 
-            device_count = len(discovery.devices)
-            tool_count = len(server.handle_list_tools())
+        device_count = len(discovery.devices)
+        tool_count = len(server.handle_list_tools())
 
-            if device_count == 0:
-                if discovery.errors:
-                    click.echo(
-                        "No devices loaded — all profiles failed to parse.",
-                        err=True,
-                    )
-                else:
-                    click.echo(
-                        f"No devices found. Add TOML profiles to"
-                        f" {profiles_dir.resolve()}",
-                        err=True,
-                    )
-                await server.stop()
-                raise SystemExit(1)
-
-            click.echo(
-                f"✓ Discovered {device_count} device(s), exposing {tool_count} tools",
-                err=True,
-            )
-
-            if server.aggregator:
-                for name in server.aggregator.device_names:
-                    s = server.aggregator.get_status(name)
-                    if s and s.connected:
-                        click.echo(f"  ✓ {name}", err=True)
-                    elif s:
-                        click.echo(f"  ✗ {name}: {s.error}", err=True)
-
-            click.echo("✓ Background recording active", err=True)
-            click.echo(f"✓ MCP server ready on http://{host}:{port}/mcp", err=True)
-
-            # Run the daemon loops (recording + retention + SSE)
-            import uvicorn
-
-            from jeltz.gateway.recorder import run_recorder
-
-            stop_event = asyncio.Event()
-
-            assert server.aggregator is not None
-            assert server.store is not None
-
-            app, _ = server._build_http_app()
-            config = uvicorn.Config(app, host=host, port=port, log_level="warning")
-            sse_server = uvicorn.Server(config)
-
-            try:
-                await asyncio.gather(
-                    run_recorder(server.aggregator, server.store, stop_event),
-                    server._run_retention_loop(stop_event),
-                    sse_server.serve(),
+        if device_count == 0:
+            if discovery.errors:
+                click.echo(
+                    "No devices loaded — all profiles failed to parse.",
+                    err=True,
                 )
-            finally:
-                stop_event.set()
-                await server.stop()
-
-        except SystemExit:
+            else:
+                click.echo(
+                    f"No devices found. Add TOML profiles to"
+                    f" {profiles_dir.resolve()}",
+                    err=True,
+                )
             await server.stop()
-            raise
+            raise SystemExit(1)
+
+        click.echo(
+            f"✓ Discovered {device_count} device(s), exposing {tool_count} tools",
+            err=True,
+        )
+
+        if server.aggregator:
+            for name in server.aggregator.device_names:
+                s = server.aggregator.get_status(name)
+                if s and s.connected:
+                    click.echo(f"  ✓ {name}", err=True)
+                elif s:
+                    click.echo(f"  ✗ {name}: {s.error}", err=True)
+
+        click.echo("✓ Background recording active", err=True)
+        click.echo(f"✓ MCP server ready on http://{host}:{port}/mcp", err=True)
+
+        await server.run_daemon_loops(host=host, port=port)
 
     try:
         asyncio.run(_run())

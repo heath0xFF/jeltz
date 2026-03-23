@@ -18,11 +18,7 @@ from typing import Any
 
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
-from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import CallToolResult, TextContent, Tool
-from starlette.applications import Starlette
-from starlette.routing import Route
-from starlette.types import Receive, Scope, Send
 
 from jeltz.gateway.aggregator import Aggregator
 from jeltz.gateway.discovery import DiscoveryResult, discover_profiles
@@ -58,6 +54,7 @@ class JeltzServer:
         self._fleet: FleetTools | None = None
         self._store: ReadingStore | None = None
         self._server = Server(name="jeltz", version="0.1.0")
+        self._daemon_active = False
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -105,7 +102,10 @@ class JeltzServer:
         if self._aggregator:
             result = await self._aggregator.call_tool(name, args)
             if result.success:
-                await self._maybe_record(name, result.data)
+                # Only record on client tool calls — the background
+                # recorder handles periodic recording in daemon mode.
+                if not self._daemon_active:
+                    await self._maybe_record(name, result.data)
                 data = {"data": result.data}
                 return CallToolResult(
                     content=[TextContent(type="text", text=str(data))],
@@ -226,7 +226,7 @@ class JeltzServer:
             await self.stop()
 
     # ------------------------------------------------------------------
-    # Daemon mode: background recording + SSE transport
+    # Daemon mode: background recording + Streamable HTTP transport
     # ------------------------------------------------------------------
 
     async def _run_retention_loop(
@@ -253,8 +253,17 @@ class JeltzServer:
             except asyncio.TimeoutError:
                 pass
 
-    def _build_http_app(self) -> tuple[Starlette, StreamableHTTPSessionManager]:
-        """Build a Starlette ASGI app that serves MCP over Streamable HTTP."""
+    def _build_http_app(self):  # type: ignore[no-untyped-def]
+        """Build a Starlette ASGI app that serves MCP over Streamable HTTP.
+
+        Imports starlette and the MCP StreamableHTTPSessionManager lazily
+        so that stdio mode doesn't require these dependencies.
+        """
+        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+        from starlette.applications import Starlette
+        from starlette.routing import Route
+        from starlette.types import Receive, Scope, Send
+
         session_manager = StreamableHTTPSessionManager(
             app=self._server,
             stateless=False,
@@ -303,43 +312,63 @@ class JeltzServer:
         server = uvicorn.Server(config)
         await server.serve()
 
-    async def run_daemon(
+    async def run_daemon_loops(
         self,
         host: str = "127.0.0.1",
         port: int = 8374,
     ) -> None:
-        """Start the server in daemon mode: background recording + SSE endpoint.
+        """Run daemon background tasks: recording, retention, and HTTP server.
 
-        Runs until interrupted. Continuously polls sensors and records readings
-        to the store. MCP clients connect/disconnect over SSE without affecting
-        the recording loop.
+        Call ``start()`` first. Uses TaskGroup so that if any task crashes,
+        all sibling tasks are cancelled and the error propagates cleanly.
         """
         import uvicorn
 
-        stop_event = asyncio.Event()
-
-        try:
-            await self.start()
-        except Exception:
-            await self.stop()
-            raise
-
         if not self._aggregator or not self._store:
-            raise RuntimeError("server failed to initialize")
+            raise RuntimeError("server not started — call start() first")
+
+        stop_event = asyncio.Event()
+        self._daemon_active = True
 
         app, _ = self._build_http_app()
         config = uvicorn.Config(app, host=host, port=port, log_level="warning")
         http_server = uvicorn.Server(config)
 
         try:
-            await asyncio.gather(
-                run_recorder(self._aggregator, self._store, stop_event),
-                self._run_retention_loop(stop_event),
-                http_server.serve(),
-            )
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(
+                    run_recorder(self._aggregator, self._store, stop_event),
+                    name="recorder",
+                )
+                tg.create_task(
+                    self._run_retention_loop(stop_event),
+                    name="retention",
+                )
+                tg.create_task(
+                    http_server.serve(),
+                    name="http",
+                )
         finally:
             stop_event.set()
+            self._daemon_active = False
             await self.stop()
+
+    async def run_daemon(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8374,
+    ) -> None:
+        """Start the server in daemon mode: background recording + HTTP endpoint.
+
+        Full lifecycle: calls ``start()``, runs daemon loops, then ``stop()``.
+        """
+        try:
+            await self.start()
+        except Exception:
+            await self.stop()
+            raise
+
+        await self.run_daemon_loops(host=host, port=port)
 
     @property
     def aggregator(self) -> Aggregator | None:

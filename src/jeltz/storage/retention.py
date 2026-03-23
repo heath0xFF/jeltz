@@ -41,34 +41,43 @@ async def _downsample_old_readings(
     """
     cutoff = time.time() - (full_res_days * 86400)
 
-    # Insert hourly averages for old full-res data
-    await db.execute(
-        """
-        INSERT INTO readings (timestamp, device_id, sensor_id, value, unit, downsampled)
-        SELECT
-            -- Use the start of each hour as the timestamp
-            CAST(CAST(timestamp / 3600 AS INTEGER) * 3600 AS REAL),
-            device_id,
-            sensor_id,
-            AVG(value),
-            unit,
-            1
-        FROM readings
-        WHERE timestamp < ?
-          AND downsampled = 0
-        GROUP BY device_id, sensor_id, unit, CAST(timestamp / 3600 AS INTEGER)
-        """,
-        (cutoff,),
-    )
+    # Use an explicit transaction so the INSERT + DELETE are atomic.
+    # Without this, a concurrent commit() from store.record() could
+    # commit the INSERT without the DELETE, causing duplicates on crash.
+    await db.execute("BEGIN IMMEDIATE")
+    try:
+        # Insert hourly averages for old full-res data
+        await db.execute(
+            """
+            INSERT INTO readings (timestamp, device_id, sensor_id, value, unit, downsampled)
+            SELECT
+                -- Use the start of each hour as the timestamp
+                CAST(CAST(timestamp / 3600 AS INTEGER) * 3600 AS REAL),
+                device_id,
+                sensor_id,
+                AVG(value),
+                unit,
+                1
+            FROM readings
+            WHERE timestamp < ?
+              AND downsampled = 0
+            GROUP BY device_id, sensor_id, unit, CAST(timestamp / 3600 AS INTEGER)
+            """,
+            (cutoff,),
+        )
 
-    # Delete the original full-res rows that were just downsampled
-    cursor = await db.execute(
-        "DELETE FROM readings WHERE timestamp < ? AND downsampled = 0",
-        (cutoff,),
-    )
-    deleted = cursor.rowcount
+        # Delete the original full-res rows that were just downsampled
+        cursor = await db.execute(
+            "DELETE FROM readings WHERE timestamp < ? AND downsampled = 0",
+            (cutoff,),
+        )
+        deleted = cursor.rowcount
 
-    await db.commit()
+        await db.commit()
+    except BaseException:
+        await db.rollback()
+        raise
+
     return deleted
 
 

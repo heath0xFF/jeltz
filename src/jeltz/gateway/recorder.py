@@ -69,7 +69,12 @@ async def _poll_device(
                     logger.debug("recorder: %s returned error: %s", namespaced, result.error)
                     continue
 
-                value = float(result.data)
+                try:
+                    value = float(result.data)
+                except (TypeError, ValueError):
+                    logger.debug("recorder: %s returned non-numeric: %r", namespaced, result.data)
+                    continue
+
                 unit = route.returns.unit if route.returns else ""
                 await store.record(
                     device_id=device_name,
@@ -77,8 +82,6 @@ async def _poll_device(
                     value=value,
                     unit=unit or "",
                 )
-            except (TypeError, ValueError):
-                logger.debug("recorder: %s returned non-numeric: %r", namespaced, result.data)
             except Exception:
                 logger.warning("recorder: failed to poll %s", namespaced, exc_info=True)
 
@@ -129,3 +132,9 @@ async def run_recorder(
     except Exception:
         logger.exception("recorder: unexpected error in polling loop")
         stop_event.set()
+    finally:
+        # Cancel any still-running tasks and wait for them to finish
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
