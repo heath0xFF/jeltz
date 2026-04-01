@@ -130,7 +130,7 @@ These profiles use temperature + humidity as an example, but the commands and re
 ## Installation
 
 ```bash
-git clone https://github.com/hhheath/jeltz.git
+git clone https://github.com/heath0xFF/jeltz.git
 cd jeltz
 pip install -e .
 ```

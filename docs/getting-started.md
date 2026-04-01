@@ -13,7 +13,7 @@ This guide walks you through connecting a physical sensor to an AI assistant usi
 ## 1. Install Jeltz
 
 ```bash
-git clone https://github.com/hhheath/jeltz.git
+git clone https://github.com/heath0xFF/jeltz.git
 cd jeltz
 pip install -e .
 ```
