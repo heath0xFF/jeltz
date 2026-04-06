@@ -1,0 +1,31 @@
+ok so what's next now? i think since i'm moving in a devrel role, that while the modbus adapter and other enterprise adapters are super valuable, doing the arduino stuff would be high impact
+
+---
+
+making a whole new repo is... something. 
+
+i guess yeah let's design the discovery protocol, and then jump into scaffolding the arduino repo
+
+---
+
+I don't think i like Jeltz jeltz(...) as the definition in arduino... think we could get more creative there?
+
+---
+
+why is it the same word repeated twice? why not something like Jeltz babel(...) or
+
+---
+
+yeah let's do that.
+
+---
+
+are you building the arduino repo IN this repo? or what's the architecture for that?
+
+---
+
+i think we want to get rid of the "phase N" stuff in the readme of the main jeltz readme.
+
+---
+
+ok so do we have the docs that explain how and why to leverage the arduino repo? does the arduino repo have the necessary "how to" documentation and example code?
