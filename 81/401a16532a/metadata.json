@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.3",
+  "checkpoint_id": "81401a16532a",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/jeltz/gateway/server.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/81/401a16532a/0/metadata.json",
+      "transcript": "/81/401a16532a/0/full.jsonl",
+      "content_hash": "/81/401a16532a/0/content_hash.txt",
+      "prompt": "/81/401a16532a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 21,
+    "cache_creation_tokens": 22945,
+    "cache_read_tokens": 457724,
+    "output_tokens": 2737,
+    "api_call_count": 15
+  }
+}
