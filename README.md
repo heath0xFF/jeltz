@@ -59,11 +59,26 @@ Jeltz runs on a gateway device (Raspberry Pi, laptop, Qualcomm IQ9, any Linux bo
 
 **The AI stays in the cloud (or on a local LLM). Jeltz is just the plumbing that connects it to your devices.** An MCP server is not an AI model — it's a lightweight protocol endpoint. It uses negligible resources on the gateway.
 
+### Two types of AI
+
+When Jeltz runs alongside edge ML (e.g., Edge Impulse models on a microcontroller), two complementary AI systems work together:
+
+| | Deterministic Model (on-device) | Reasoning Model (LLM via MCP) |
+|---|---|---|
+| **What it does** | Fast classification / detection | Planning, judgment, orchestration |
+| **Speed** | Microseconds | Seconds |
+| **Role** | Reflex — "this is anomalous" | Brain — "here's what to do about it" |
+| **Runs on** | MCU / DSP | Gateway CPU / NPU / cloud |
+| **Deterministic?** | Yes | No |
+| **Needs context?** | No — stateless inference | Yes — history, correlations, goals |
+
+Deterministic first, agentic second. A 50KB model on a Cortex-M4 handles routine classification in microseconds. The LLM only engages when something requires judgment — anomalies, cross-device correlations, decisions that need context. Don't waste reasoning cycles on things a tiny model already handles.
+
 ## Adding devices
 
 ### TOML profiles
 
-Write a TOML file that describes the device: what it is, how to connect, and what commands it understands. Jeltz generates MCP tools from it.
+A device profile is a tool description for the physical world. Think of it like onboarding an AI to a new device — the better the description, the better the agent performs. Write what the device does, how to connect, and what commands it understands. Jeltz generates MCP tools from it.
 
 ```toml
 [device]

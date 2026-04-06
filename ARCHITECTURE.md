@@ -251,7 +251,19 @@ These are deliberate omissions, not oversights:
 - **Web dashboard.** Phase 4. The CLI provides all monitoring for v1.
 - **Local LLM integration.** ~~Phase 4.~~ **Done.** `jeltz chat` bridges any OpenAI-compatible local LLM (Ollama, llama.cpp, LM Studio, vLLM) to Jeltz's MCP tools in-process. The LLM management (downloading models, running inference) stays with the external server — Jeltz just connects to its API. Optional dependency: `pip install jeltz[chat]`.
 - **The `jeltz-arduino` library.** Phase 3. It's a separate repo with a separate language (C++) and a separate distribution channel (Arduino Library Manager / PlatformIO). v1 is profile-driven only.
-- **Actuator safety controls.** If a profile defines a tool that triggers a relay or motor, there's no confirmation step or safety interlock in v1. This is documented as a warning. Phase 2 adds configurable confirmation requirements for write/actuate tools.
+- **Actuator safety controls and escalation policy.** If a profile defines a tool that triggers a relay or motor, there's no confirmation step or safety interlock in v1. This is documented as a warning. Phase 2 adds per-device escalation policy in the TOML profile — tools are classified by action level, and the gateway enforces boundaries before executing:
+
+  ```toml
+  [escalation]
+  # Tools the agent can call without confirmation
+  autonomous = ["get_reading", "get_status"]
+  # Tools that require human confirmation before execution
+  confirm = ["set_threshold", "calibrate"]
+  # Tools the agent can never call (manual-only)
+  deny = ["emergency_stop", "factory_reset"]
+  ```
+
+  The gateway intercepts tool calls and checks escalation policy before routing to the adapter. Denied tools return an error explaining the restriction. Confirmation-required tools pause execution and surface a prompt to the operator (mechanism TBD — likely via MCP resource or event bus). This keeps safety decisions in the profile where the hardware engineer defines them, not in the LLM's judgment.
 - **Profile registry / package manager.** Phase 2. For v1, profiles are files in a directory. Community sharing is via Git.
 
 ## Deployment tiers
@@ -277,6 +289,10 @@ The same codebase runs at three scales:
 5. **Mock everything.** Every adapter has a mock equivalent. Every profile can be tested without hardware. CI runs without physical devices.
 
 6. **Profiles are the unit of community contribution.** Writing a profile for a sensor you own and sharing it is the lowest-friction way to contribute. The profile registry should feel like the Arduino Library Manager — search, install, go.
+
+7. **Deterministic first, agentic second.** When paired with on-device ML (Edge Impulse), the deterministic model handles routine classification in microseconds. The LLM agent only engages when something requires judgment — anomalies, cross-device correlations, decisions that need context. Don't waste reasoning cycles on things a 50KB model can handle.
+
+8. **Escalate, don't assume.** Physical actions have consequences. Agents should have explicit boundaries: what they can do autonomously, what requires human confirmation, what they should never do. These boundaries are defined per-device in the profile via escalation policy (Phase 2).
 
 ## Known concerns and TODOs
 
